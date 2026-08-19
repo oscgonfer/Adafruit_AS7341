@@ -327,6 +327,7 @@ public:
   bool setGPIOInverted(bool gpio_inverted);
   bool getGPIOValue(void);
   bool setGPIOValue(bool);
+  bool enableFlickerDetection(bool enable_fd);
 
 protected:
   virtual bool _init(int32_t sensor_id);
@@ -338,7 +339,6 @@ protected:
 
 private:
   bool enableSMUX(void);
-  bool enableFlickerDetection(bool enable_fd);
   void FDConfig(void);
   int8_t getFlickerDetectStatus(void);
   bool setSMUXCommand(as7341_smux_cmd_t command);
