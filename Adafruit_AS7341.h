@@ -340,6 +340,8 @@ protected:
 private:
   bool enableSMUX(void);
   void FDConfig(void);
+  bool enableFlickerDetection(bool enable_fd);
+
   int8_t getFlickerDetectStatus(void);
   bool setSMUXCommand(as7341_smux_cmd_t command);
   void writeRegister(byte addr, byte val);
