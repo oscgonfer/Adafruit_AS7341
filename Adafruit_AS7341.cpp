@@ -1040,3 +1040,260 @@ void Adafruit_AS7341::writeRegister(byte addr, byte val) {
   Adafruit_BusIO_Register reg = Adafruit_BusIO_Register(i2c_dev, addr);
   reg.write(val);
 }
+
+bool Adafruit_AS7341::enableFlickerFIFO(bool enable)
+{
+  Adafruit_BusIO_Register fd_cfg0_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_CFG0);
+
+  Adafruit_BusIO_RegisterBits fifo_write_fd =
+      Adafruit_BusIO_RegisterBits(&fd_cfg0_reg, 1, 7);
+
+  return fifo_write_fd.write(enable);
+}
+
+uint8_t Adafruit_AS7341::flickerFIFOLevel()
+{
+  Adafruit_BusIO_Register fifo_lvl_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FIFO_LVL);
+
+  return (uint8_t)fifo_lvl_reg.read();
+}
+
+bool Adafruit_AS7341::clearFlickerFIFO()
+{
+  Adafruit_BusIO_Register control_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_CONTROL);
+
+  Adafruit_BusIO_RegisterBits fifo_clear =
+      Adafruit_BusIO_RegisterBits(&control_reg, 1, 1);
+
+  return fifo_clear.write(true);
+}
+
+uint16_t Adafruit_AS7341::readFlickerFIFO()
+{
+  Adafruit_BusIO_Register fifo_data_reg =
+      Adafruit_BusIO_Register(
+          i2c_dev,
+          AS7341_FDATA_L,
+          2,
+          LSBFIRST);
+
+  return (uint16_t)fifo_data_reg.read();
+}
+
+uint8_t Adafruit_AS7341::readFlickerFIFO(
+    uint16_t *buffer,
+    uint8_t max_samples)
+{
+  if (buffer == nullptr || max_samples == 0)
+    return 0;
+
+  uint8_t available = flickerFIFOLevel();
+
+  if (available > max_samples)
+    available = max_samples;
+
+  if (available == 0)
+    return 0;
+
+  // One block read
+  Adafruit_BusIO_Register fifo_data_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FDATA_L, 2);
+
+  fifo_data_reg.read((uint8_t *)buffer, available * 2);
+
+  return available;
+}
+
+/**
+ * @brief Returns whether the flicker FIFO buffer has overflowed since the
+ * last time it was read (STATUS6.FIFO_OV auto-clears on FIFO read)
+ *
+ * @return true: samples were lost to overflow false: no overflow
+ */
+bool Adafruit_AS7341::flickerFIFOOverflowed(void) {
+  Adafruit_BusIO_Register status6_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_STATUS6);
+  Adafruit_BusIO_RegisterBits fifo_ov_bit =
+      Adafruit_BusIO_RegisterBits(&status6_reg, 1, 7);
+  return fifo_ov_bit.read();
+}
+
+/**
+ * @brief Sets the flicker detection ADC (ADC5) integration time
+ *
+ * Sample period is `fd_time * 2.78us`. Must not be called while flicker
+ * detection is enabled and the sensor is powered on.
+ *
+ * @param fd_time 11-bit integration time value
+ * @return true: success false: failure
+ */
+bool Adafruit_AS7341::setFlickerIntegrationTime(uint16_t fd_time) {
+  fd_time &= 0x7FF;
+
+  Adafruit_BusIO_Register fd_time1_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME1);
+  bool ok = fd_time1_reg.write(fd_time & 0xFF);
+
+  Adafruit_BusIO_Register fd_time2_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME2);
+  Adafruit_BusIO_RegisterBits fd_time_msb =
+      Adafruit_BusIO_RegisterBits(&fd_time2_reg, 3, 0);
+
+  return ok && fd_time_msb.write(fd_time >> 8);
+}
+
+/**
+ * @brief Returns the currently configured flicker detection integration
+ * time
+ *
+ * @return uint16_t 11-bit integration time value
+ */
+uint16_t Adafruit_AS7341::getFlickerIntegrationTime(void) {
+  Adafruit_BusIO_Register fd_time1_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME1);
+  Adafruit_BusIO_Register fd_time2_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME2);
+  Adafruit_BusIO_RegisterBits fd_time_msb =
+      Adafruit_BusIO_RegisterBits(&fd_time2_reg, 3, 0);
+
+  uint16_t lsb = fd_time1_reg.read();
+  uint16_t msb = fd_time_msb.read();
+  return (uint16_t)((msb << 8) | lsb);
+}
+
+/**
+ * @brief Sets the ADC5 gain used for flicker detection
+ *
+ * @param gain The gain amount. must be an `as7341_gain_t`
+ * @return true: success false: failure
+ */
+bool Adafruit_AS7341::setFlickerGain(as7341_gain_t gain) {
+  Adafruit_BusIO_Register fd_time2_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME2);
+  Adafruit_BusIO_RegisterBits fd_gain_bits =
+      Adafruit_BusIO_RegisterBits(&fd_time2_reg, 5, 3);
+  return fd_gain_bits.write(gain);
+}
+
+/**
+ * @brief Returns the sample rate the flicker ADC currently produces raw
+ * samples at, derived from the configured integration time
+ *
+ * @return float Sample rate in Hz, or 0 if unconfigured
+ */
+float Adafruit_AS7341::getFlickerSampleRateHz(void) {
+  uint16_t fd_time = getFlickerIntegrationTime();
+  if (fd_time == 0)
+    return 0;
+  return 1000000.0 / (fd_time * 2.78);
+}
+
+/**
+ * @brief Enables or disables automatic gain control (AGC) for flicker detection
+ *
+ * AGC defaults to enabled on the sensor. It must be disabled for raw
+ * sample capture since a gain change mid-capture would corrupt the
+ * waveform amplitude.
+ *
+ * @param enable true: AGC enabled false: AGC disabled, gain is fixed
+ * @return true: success false: failure
+ */
+bool Adafruit_AS7341::enableFlickerAGC(bool enable) {
+  Adafruit_BusIO_Register cfg8_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_CFG8);
+  Adafruit_BusIO_RegisterBits fd_agc_bit =
+      Adafruit_BusIO_RegisterBits(&cfg8_reg, 1, 3);
+  return fd_agc_bit.write(enable);
+}
+
+/**
+ * @brief Captures raw, evenly-spaced samples from the flicker photodiode
+ * (ADC5) via the FIFO buffer, at a chosen integration time and gain.
+ *
+ * This returns the raw waveform. The achieved sample rate is
+ * fd_time * 2.78us and can be read back with getFlickerSampleRateHz().
+ *
+ * @param buffer Destination for the raw samples
+ * @param num_samples Number of samples to capture. It can exceed the FIFO's
+ * 128 length, the FIFO is drained incrementally as it fills
+ * @param fd_time Flicker ADC integration time, sets the sample rate
+ * @param fd_gain Flicker ADC gain
+ * @param timeout_ms Maximum time to wait for the capture to complete; 0
+ * picks an automatic timeout based on the expected fill time
+ * @return true: num_samples were captured without a FIFO overflow
+ * false: timed out or samples were lost to overflow
+ */
+bool Adafruit_AS7341::captureFlickerRaw(uint16_t *buffer,
+                                         uint16_t num_samples,
+                                         uint16_t fd_time,
+                                         as7341_gain_t fd_gain,
+                                         uint32_t timeout_ms) {
+  if (buffer == nullptr || num_samples == 0)
+    return false;
+
+  // FD_TIME/FD_GAIN must not change while FDEN=1 and PON=1
+  enableFlickerDetection(false);
+
+  // Route the flicker photodiode to ADC5
+  setSMUXCommand(AS7341_SMUX_CMD_WRITE);
+  FDConfig();
+  enableSMUX();
+
+  enableFlickerAGC(false);
+  setFlickerGain(fd_gain);
+  setFlickerIntegrationTime(fd_time);
+
+  clearFlickerFIFO();
+  enableFlickerFIFO(true);
+
+  float fs = getFlickerSampleRateHz();
+  if (fs <= 0)
+    return false;
+
+  if (timeout_ms == 0) {
+    // 3x the expected fill time, plus a fixed margin for setup/I2C overhead
+    timeout_ms = (uint32_t)((num_samples / fs) * 1000.0 * 3.0) + 50;
+  }
+
+  // Drain well before the 128-entry FIFO can fill and overflow
+  uint32_t poll_delay_ms = (uint32_t)((32.0 / fs) * 1000.0);
+  if (poll_delay_ms < 1)
+    poll_delay_ms = 1;
+
+  powerEnable(true);
+  enableFlickerDetection(true);
+
+  uint16_t collected = 0;
+  uint32_t start = millis();
+  bool success = true;
+
+  while (collected < num_samples) {
+    if (millis() - start > timeout_ms) {
+      success = false;
+      break;
+    }
+
+    uint8_t level = flickerFIFOLevel();
+    if (level == 0) {
+      delay(poll_delay_ms);
+      continue;
+    }
+
+    uint16_t remaining = num_samples - collected;
+    uint8_t to_read = (level > remaining) ? (uint8_t)remaining : level;
+
+    collected += readFlickerFIFO(&buffer[collected], to_read);
+
+    if (flickerFIFOOverflowed()) {
+      success = false;
+      break;
+    }
+  }
+
+  enableFlickerDetection(false);
+
+  return success && (collected == num_samples);
+}

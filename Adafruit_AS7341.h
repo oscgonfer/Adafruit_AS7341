@@ -327,7 +327,12 @@ public:
   bool setGPIOInverted(bool gpio_inverted);
   bool getGPIOValue(void);
   bool setGPIOValue(bool);
-  bool enableFlickerDetection(bool enable_fd);
+
+  float getFlickerSampleRateHz(void);
+  uint16_t getFlickerIntegrationTime(void);
+  bool captureFlickerRaw(uint16_t *buffer, uint16_t num_samples,
+                          uint16_t fd_time, as7341_gain_t fd_gain,
+                          uint32_t timeout_ms = 0);
 
 protected:
   virtual bool _init(int32_t sensor_id);
@@ -342,6 +347,17 @@ private:
   void FDConfig(void);
   bool enableFlickerDetection(bool enable_fd);
 
+  bool enableFlickerFIFO(bool enable);
+  bool clearFlickerFIFO();
+  uint8_t flickerFIFOLevel();
+  uint16_t readFlickerFIFO();
+  uint8_t readFlickerFIFO(uint16_t *buffer, uint8_t max_samples);
+  bool flickerFIFOOverflowed(void);
+
+  bool setFlickerIntegrationTime(uint16_t fd_time);
+
+  bool setFlickerGain(as7341_gain_t gain);
+  bool enableFlickerAGC(bool enable);
   int8_t getFlickerDetectStatus(void);
   bool setSMUXCommand(as7341_smux_cmd_t command);
   void writeRegister(byte addr, byte val);
