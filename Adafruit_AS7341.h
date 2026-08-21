@@ -273,6 +273,8 @@ public:
 
   long getTINT();
   float toBasicCounts(uint16_t raw);
+  float toBasicCounts(uint16_t raw, uint16_t integration_time_steps,
+                       as7341_gain_t gain);
 
   bool readAllChannels(void);
   bool readAllChannels(uint16_t *readings_buffer);
@@ -330,6 +332,7 @@ public:
 
   float getFlickerSampleRateHz(void);
   uint16_t getFlickerIntegrationTime(void);
+  as7341_gain_t getFlickerGain(void);
   bool captureFlickerRaw(uint16_t *buffer, uint16_t num_samples,
                           uint16_t fd_time, as7341_gain_t fd_gain,
                           uint32_t timeout_ms = 0);

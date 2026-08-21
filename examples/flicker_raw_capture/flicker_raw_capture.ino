@@ -46,8 +46,15 @@ void loop() {
   Serial.print(as7341.getFlickerSampleRateHz());
   Serial.println(" Hz");
 
+  // Read the FD_TIME/FD_GAIN for this capture was
+  uint16_t fd_time = as7341.getFlickerIntegrationTime();
+  as7341_gain_t fd_gain = as7341.getFlickerGain();
+
   for (uint16_t i = 0; i < NUM_SAMPLES; i++) {
-    Serial.println(samples[i]);
+    float basic_counts = as7341.toBasicCounts(samples[i], fd_time, fd_gain);
+    Serial.print(samples[i]);
+    Serial.print("\t");
+    Serial.println(basic_counts);
   }
 
   delay(2000);

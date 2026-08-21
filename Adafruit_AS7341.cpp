@@ -937,6 +937,40 @@ long Adafruit_AS7341::getTINT() {
 }
 
 /**
+ * @brief Converts an `as7341_gain_t` setting to its numeric multiplier
+ *
+ * @param gain The gain setting to convert
+ * @return float The gain multiplier, e.g. `AS7341_GAIN_8X` -> 8.0
+ */
+static float as7341_gain_to_multiplier(as7341_gain_t gain) {
+  switch (gain) {
+  case AS7341_GAIN_0_5X:
+    return 0.5;
+  case AS7341_GAIN_1X:
+    return 1;
+  case AS7341_GAIN_2X:
+    return 2;
+  case AS7341_GAIN_4X:
+    return 4;
+  case AS7341_GAIN_8X:
+    return 8;
+  case AS7341_GAIN_16X:
+    return 16;
+  case AS7341_GAIN_32X:
+    return 32;
+  case AS7341_GAIN_64X:
+    return 64;
+  case AS7341_GAIN_128X:
+    return 128;
+  case AS7341_GAIN_256X:
+    return 256;
+  case AS7341_GAIN_512X:
+    return 512;
+  }
+  return 0;
+}
+
+/**
  * @brief Converts raw ADC values to basic counts
  *
  * The basic counts are `RAW/(GAIN * TINT)`
@@ -946,44 +980,28 @@ long Adafruit_AS7341::getTINT() {
  * @return float The basic counts
  */
 float Adafruit_AS7341::toBasicCounts(uint16_t raw) {
-  float gain_val = 0;
-  as7341_gain_t gain = getGain();
-  switch (gain) {
-  case AS7341_GAIN_0_5X:
-    gain_val = 0.5;
-    break;
-  case AS7341_GAIN_1X:
-    gain_val = 1;
-    break;
-  case AS7341_GAIN_2X:
-    gain_val = 2;
-    break;
-  case AS7341_GAIN_4X:
-    gain_val = 4;
-    break;
-  case AS7341_GAIN_8X:
-    gain_val = 8;
-    break;
-  case AS7341_GAIN_16X:
-    gain_val = 16;
-    break;
-  case AS7341_GAIN_32X:
-    gain_val = 32;
-    break;
-  case AS7341_GAIN_64X:
-    gain_val = 64;
-    break;
-  case AS7341_GAIN_128X:
-    gain_val = 128;
-    break;
-  case AS7341_GAIN_256X:
-    gain_val = 256;
-    break;
-  case AS7341_GAIN_512X:
-    gain_val = 512;
-    break;
-  }
+  float gain_val = as7341_gain_to_multiplier(getGain());
   return raw / (gain_val * (getATIME() + 1) * (getASTEP() + 1) * 2.78 / 1000);
+}
+
+/**
+ * @brief Converts a raw ADC value to basic counts for specific
+ * integration time and gain
+ *
+ * The basic counts are `RAW/(GAIN * TINT)`
+ *
+ * @param raw The raw ADC value to convert
+ * @param integration_time_steps The integration time the sample was
+ * captured with, in 2.78µs steps
+ * @param gain The gain the sample was captured with
+ *
+ * @return float The basic counts
+ */
+float Adafruit_AS7341::toBasicCounts(uint16_t raw,
+                                      uint16_t integration_time_steps,
+                                      as7341_gain_t gain) {
+  float gain_val = as7341_gain_to_multiplier(gain);
+  return raw / (gain_val * integration_time_steps * 2.78 / 1000);
 }
 
 /**
@@ -1176,6 +1194,20 @@ bool Adafruit_AS7341::setFlickerGain(as7341_gain_t gain) {
   Adafruit_BusIO_RegisterBits fd_gain_bits =
       Adafruit_BusIO_RegisterBits(&fd_time2_reg, 5, 3);
   return fd_gain_bits.write(gain);
+}
+
+/**
+ * @brief Returns the currently configured ADC5 gain used for flicker
+ * detection
+ *
+ * @return as7341_gain_t The current flicker detection gain
+ */
+as7341_gain_t Adafruit_AS7341::getFlickerGain(void) {
+  Adafruit_BusIO_Register fd_time2_reg =
+      Adafruit_BusIO_Register(i2c_dev, AS7341_FD_TIME2);
+  Adafruit_BusIO_RegisterBits fd_gain_bits =
+      Adafruit_BusIO_RegisterBits(&fd_time2_reg, 5, 3);
+  return (as7341_gain_t)fd_gain_bits.read();
 }
 
 /**
